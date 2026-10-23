@@ -1,0 +1,7 @@
+services:
+  tests:
+    build:
+      secrets: [proxy_ca]
+secrets:
+  proxy_ca:
+    file: /etc/ssl/certs/ca-certificates.crt

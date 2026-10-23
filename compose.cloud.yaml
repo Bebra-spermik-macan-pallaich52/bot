@@ -1,0 +1,19 @@
+# Managed cloud only: preserve the provided proxy trust without baking CA into image.
+services:
+  collector: &cloud
+    build:
+      secrets: [proxy_ca]
+    volumes:
+      - /etc/ssl/certs/ca-certificates.crt:/run/proxy-ca.pem:ro
+    environment:
+      REQUESTS_CA_BUNDLE: /run/proxy-ca.pem
+      SSL_CERT_FILE: /run/proxy-ca.pem
+  backfill: *cloud
+  analyst:
+    <<: *cloud
+    volumes:
+      - reports:/app/reports
+      - /etc/ssl/certs/ca-certificates.crt:/run/proxy-ca.pem:ro
+secrets:
+  proxy_ca:
+    file: /etc/ssl/certs/ca-certificates.crt

@@ -1,0 +1,24 @@
+# Disposable isolated database. No host ports or production volumes.
+services:
+  testdb:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: market_test
+      POSTGRES_USER: market
+      POSTGRES_HOST_AUTH_METHOD: trust
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U market -d market_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+  tests:
+    build:
+      context: .
+      target: test
+    environment:
+      TEST_DATABASE_URL: postgresql://market@testdb:5432/market_test
+    depends_on:
+      testdb:
+        condition: service_healthy
