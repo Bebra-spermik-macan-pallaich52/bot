@@ -43,6 +43,13 @@ def test_worker_marks_only_successful_rest_repair(tmp_path,monkeypatch,failed):
     monkeypatch.setattr(backfill,'setup',Mock())
     monkeypatch.setattr(backfill,'fill',Mock(side_effect=RuntimeError('REST denied') if failed else None))
     backfill.main()
-    assert path.exists() is not failed
-    if not failed:
+    assert path.exists()
+    data=json.loads(path.read_text())
+    if failed:
+        assert data['phase']=='error'
+        assert data['last_recent_success_ms']==0
+        with pytest.raises(RuntimeError,match='Last REST'):
+            health.check_backfill_state()
+    else:
+        assert data['phase']=='ok'
         health.check_backfill_state()

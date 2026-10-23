@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Crypto Pattern Lab · Состояние данных</title>
+  <link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
+</head>
+<body>
+  <main>
+    <header><div class="brand"><span class="mark">⌁</span><div><h1>Crypto Pattern Lab</h1><p>Исследование рынка · Bybit</p></div></div><span class="tag">ТОЛЬКО НАБЛЮДЕНИЕ</span></header>
+    <div class="heading"><div><p class="eyebrow">ОБЗОР СИСТЕМЫ</p><h2>Состояние данных <span id="instrument">—</span></h2><p>Свежесть, полнота истории и результаты исследований в одном месте.</p></div><div class="refresh"><button id="refresh" type="button">Обновить</button><span id="updated" aria-live="polite">Загрузка…</span></div></div>
+    <div id="connection-error" class="alert error" role="alert" hidden>Нет связи с панелью. Показанные ранее данные могли устареть. Повторяем запрос автоматически.</div>
+    <section class="services" aria-label="Состояние компонентов">
+      <article class="service"><span>PostgreSQL</span><strong id="db-state">Проверяем…</strong><p id="db-note">Доступность базы</p></article>
+      <article class="service"><span>Поступление свечей</span><strong id="live-state">Проверяем…</strong><p id="live-note">Свежесть и последние 10 минут</p></article>
+      <article class="service"><span>REST-дозагрузка</span><strong id="rest-state">Проверяем…</strong><p id="rest-note">История и восстановление пропусков</p></article>
+      <article class="service"><span>Аналитик</span><strong id="analyst-state">Проверяем…</strong><p id="analyst-note">Свежесть исследовательского отчёта</p></article>
+    </section>
+    <section class="panel"><div class="section-head"><div><h3>Качество истории</h3><p id="window-note">Закрытые минутные свечи · временные отметки UTC</p></div><span id="quality-badge" class="badge">Ожидание</span></div>
+      <div class="metrics"><div><span>Всего в базе</span><strong id="total">—</strong></div><div><span>Покрытие окна</span><strong id="coverage">—</strong></div><div><span>Пропущено минут</span><strong id="missing">—</strong></div><div><span>Некорректных свечей в окне</span><strong id="invalid">—</strong></div></div>
+      <div class="time-row"><span>Последняя закрытая свеча: <b id="last-candle">—</b></span><span>Последняя запись в БД: <b id="last-write">—</b></span></div>
+      <div id="quality-note" class="alert" role="status">Ожидаем результат проверки.</div>
+      <div class="chart-head"><h4>Покрытие по дням UTC</h4><span>Зелёный — без пропусков · красный — есть пропуски</span></div>
+      <div id="daily" class="daily" aria-label="Покрытие истории по дням"></div>
+      <p class="muted">Проверяется всё заданное окно, включая пропуски в начале и конце. Две последние закрытые минуты могут ожидать доставки. Пропуски более старой истории за пределами окна не проверяются.</p>
+    </section>
+    <section class="panel"><div class="section-head"><div><h3>Пропуски в истории</h3><p id="gap-note">Отсутствующие минуты, объединённые в диапазоны.</p></div></div><div class="table-wrap"><table><thead><tr><th>Начало UTC</th><th>Конец UTC</th><th>Минут</th></tr></thead><tbody id="gaps"><tr><td colspan="3">Загрузка…</td></tr></tbody></table></div></section>
+    <section class="panel"><div class="section-head"><div><h3>Исследования паттернов</h3><p id="research-note">Результаты тестовой выборки.</p></div><span id="research-badge" class="badge">Ожидание</span></div>
+      <div class="table-wrap"><table><thead><tr><th>Условие</th><th>Горизонт</th><th>Событий</th><th>Среднее по направлению</th><th>95% CI среднего</th><th>После условных затрат</th></tr></thead><tbody id="patterns"><tr><td colspan="6">Загрузка…</td></tr></tbody></table></div>
+      <p class="muted">Для DOWN результат — минус изменение цены. Интервал описательный, не проверка превосходства над контрольной выборкой. Минимальный размер выборки не доказывает надёжность паттерна.</p>
+    </section>
+    <footer><span class="dot"></span><p>Исследовательский инструмент. Прогнозное преимущество и прибыльность не подтверждены. Реальная торговля не подключена.</p><span>Обновление каждые 15 с</span></footer>
+  </main>
+</body>
+</html>

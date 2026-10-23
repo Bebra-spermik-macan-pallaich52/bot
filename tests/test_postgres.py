@@ -77,3 +77,40 @@ def test_live_candle_and_rest_gap_repair_roundtrip(database,monkeypatch):
     with storage.connect() as conn:
         assert conn.execute('SELECT count(*) FROM candles').fetchone()[0]==10
         assert conn.execute('SELECT max(start_ms) FROM candles').fetchone()[0]==9*60000
+
+
+def test_real_quality_audit_and_read_only_dashboard(database,tmp_path,monkeypatch):
+    import json
+    import quality
+    import dashboard
+    now=2*quality.DAY_MS+30000
+    begin=quality.DAY_MS
+    storage.save_rows([row(ts) for ts in range(begin,2*quality.DAY_MS,60000)])
+    result=quality.audit(days=1,now_ms=now)
+    assert result['ready'] is True
+    assert result['total_candles']==1440
+    assert result['missing_candles']==0
+    with storage.connect() as conn:
+        conn.execute('DELETE FROM candles WHERE start_ms IN (%s,%s)',(begin,begin+60000))
+    result=quality.audit(days=1,now_ms=now)
+    assert result['ready'] is False
+    assert result['missing_candles']==2
+    assert result['gap_ranges'][0]['minutes']==2
+    # An invalid externally imported row and a future row cannot be called ready.
+    storage.save_rows([row(begin),row(begin+60000)])
+    malformed=list(row(begin)); malformed[4]=-1
+    storage.save_rows([tuple(malformed),row(2*quality.DAY_MS)])
+    result=quality.audit(days=1,now_ms=now)
+    assert result['invalid_candles']==1
+    assert result['unclosed_or_future_candles']==1
+    assert result['ready'] is False
+    monkeypatch.setenv('BACKFILL_DAYS','1')
+    monkeypatch.setenv('REPORT_PATH',str(tmp_path/'none.json'))
+    monkeypatch.setenv('BACKFILL_STATE_PATH',str(tmp_path/'none-state.json'))
+    monkeypatch.setattr(dashboard.time,'time',lambda:now/1000)
+    status=dashboard.build_status()
+    assert status['database']['state']=='ok'
+    assert status['quality']['invalid_candles']==1
+    assert status['ready'] is False
+    with storage.connect() as conn:
+        assert conn.execute('SELECT count(*) FROM candles').fetchone()[0]==1441

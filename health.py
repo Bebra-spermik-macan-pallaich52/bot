@@ -26,6 +26,8 @@ def check_backfill_state(now_ms=None):
     data = json.loads(Path(os.getenv('BACKFILL_STATE_PATH','state/backfill.json')).read_text())
     if data.get('symbol') != SYMBOL or data.get('category') != CATEGORY:
         raise RuntimeError('Backfill state belongs to another instrument')
+    if data.get('phase')=='error':
+        raise RuntimeError('Last REST repair attempt failed')
     if not 0 <= now-data['last_full_success_ms'] <= 7_200_000:
         raise RuntimeError('Full REST repair has not succeeded in 2h')
     if not 0 <= now-data['last_recent_success_ms'] <= 300_000:

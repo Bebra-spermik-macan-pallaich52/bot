@@ -43,34 +43,72 @@ def interruptible_wait(seconds):
         raise InterruptedError('Stopping backfill')
 
 
+def read_state():
+    try:
+        data = json.loads(Path(os.getenv('BACKFILL_STATE_PATH','state/backfill.json')).read_text())
+        if data.get('symbol')==SYMBOL and data.get('category')==CATEGORY and data.get('backfill_days')==DAYS:
+            return data
+    except (OSError, ValueError, AttributeError):
+        pass
+    return {'last_full_success_ms':0,'last_recent_success_ms':0,
+            'symbol':SYMBOL,'category':CATEGORY,'backfill_days':DAYS}
+
+
+def write_state(data):
+    path = Path(os.getenv('BACKFILL_STATE_PATH','state/backfill.json'))
+    path.parent.mkdir(parents=True,exist_ok=True)
+    temp = path.with_suffix('.tmp')
+    temp.write_text(json.dumps(data,allow_nan=False))
+    temp.replace(path)
+
+
+def error_kind(err):
+    # Keep credentials, DSNs and response bodies out of persisted/public status.
+    if isinstance(err,requests.HTTPError):
+        code = err.response.status_code if err.response is not None else None
+        return f'http_{code}' if code in (403,429) else 'http_error'
+    if isinstance(err,requests.RequestException):
+        return 'network'
+    from psycopg import Error as DatabaseError
+    if isinstance(err,DatabaseError):
+        return 'database'
+    if isinstance(err,(ValueError,KeyError,TypeError)):
+        return 'invalid_response'
+    return 'internal'
+
+
 def main():
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: STOP.set())
     next_full = 0
-    last_full_success_ms = 0
+    state = read_state()
     while not STOP.is_set():
         try:
+            state.update(phase='running',last_attempt_ms=int(time.time()*1000))
+            write_state(state)
             setup()
             full = time.monotonic() >= next_full
-            # Ten minute overlap repairs a dropped live message promptly; hourly
-            # full sweeps recover longer outages even after process restarts.
             fill(DAYS if full else 10/1440)
             if STOP.is_set():
+                state['phase']='stopped'
+                write_state(state)
                 break
             now_ms = int(time.time()*1000)
             if full:
                 next_full = time.monotonic()+3600
-                last_full_success_ms = now_ms
-            path = Path(os.getenv('BACKFILL_STATE_PATH','state/backfill.json'))
-            path.parent.mkdir(parents=True, exist_ok=True)
-            temp = path.with_suffix('.tmp')
-            temp.write_text(json.dumps({'last_full_success_ms':last_full_success_ms,
-                'last_recent_success_ms':now_ms,'symbol':SYMBOL,'category':CATEGORY}))
-            temp.replace(path)
-        except Exception:
+                state['last_full_success_ms']=now_ms
+            state.update(last_recent_success_ms=now_ms,phase='ok',last_error_kind=None)
+            write_state(state)
+        except Exception as err:
             if not STOP.is_set():
                 logging.exception('Repair failed; next cycle retries from durable pages')
+                state.update(phase='error',last_error_kind=error_kind(err),
+                             last_error_at_ms=int(time.time()*1000))
+                try:
+                    write_state(state)
+                except OSError:
+                    logging.exception('Cannot persist REST status')
         STOP.wait(60)
 
 

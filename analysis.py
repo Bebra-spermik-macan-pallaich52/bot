@@ -157,6 +157,7 @@ def run():
     report = evaluate(load_candles(), split_ms=int(split) if split else None,
                       minimum=int(os.getenv('MIN_EVENTS','30')),
                       cost_bps=float(os.getenv('COST_BPS','10')))
+    report['symbol'], report['category'] = SYMBOL, CATEGORY
     report['generated_at_ms'] = int(time.time()*1000)
     path = Path(os.getenv('REPORT_PATH','reports/latest.json'))
     path.parent.mkdir(parents=True, exist_ok=True)

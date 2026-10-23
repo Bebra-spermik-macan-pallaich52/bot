@@ -86,6 +86,24 @@ services:
       timeout: 15s
       start_period: 60s
       retries: 3
+  dashboard:
+    <<: *worker
+    command: ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "2", "--timeout", "30", "--access-logfile", "-", "--error-logfile", "-", "dashboard:application"]
+    environment:
+      <<: *market_env
+      BACKFILL_DAYS: ${BACKFILL_DAYS:-30}
+    ports:
+      - "127.0.0.1:${DASHBOARD_PORT:-8080}:8080"
+    volumes:
+      - reports:/app/reports:ro
+      - ingestion_state:/app/state:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
 volumes:
   pgdata:
   reports:
