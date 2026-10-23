@@ -8,9 +8,44 @@ function badge(id, label, tone='warn') { text(id,label); $(id).className = `badg
 function state(id,label,tone) { text(id,label); $(id).className=tone; }
 function row(body, values) { const tr=document.createElement('tr'); for(const value of values) { const td=document.createElement('td'); td.textContent=value; tr.append(td); } body.append(tr); }
 function empty(body, message, columns) { body.replaceChildren(); const tr=document.createElement('tr'); const td=document.createElement('td'); td.colSpan=columns; td.textContent=message; tr.append(td); body.append(tr); }
+function renderForecast(component) {
+  const report=component?.report, forecast=report?.forecast;
+  $('forecast-values').hidden=true;
+  $('forecast-folds').replaceChildren();
+  text('forecast-time','От закрытия последней доступной свечи, не траектория внутри периода.');
+  const reasons={training_history_too_short:'Нужно не менее 30 дней истории для обучения.',insufficient_contiguous_samples:'Недостаточно непрерывных обучающих данных.',insufficient_class_samples:'Слишком мало примеров одного из направлений.',no_candles:'Свечей пока нет.',stale_candles:'Свечи устарели — новый прогноз не публикуется.',gaps_or_invalid_features:'Есть пропуски или некорректные данные в недавнем окне.',incompatible_model:'Модель не соответствует текущему окну.',old_forecast_report:'Расчёт прогноза давно не обновлялся.',expired_forecast:'Срок прогноза истёк.',calculation_failed:'Ошибка расчёта. Подробности — в логах forecaster.',different_config:'Ожидаем прогноз для текущих настроек.',database_unavailable:'База данных недоступна. Актуальность прогноза не подтверждена.'};
+  const evidence=report?.validation?.evidence;
+  const conclusion=evidence==='exploratory_edge' ? 'На исторических периодах есть предварительное преимущество над базой. Нужна проверка на новых прогнозах.' : evidence==='no_edge_detected' ? 'На исторической проверке надёжное преимущество над базой не обнаружено.' : 'Исторических проверочных периодов пока недостаточно для оценки преимущества.';
+  badge('forecast-badge',forecast && component.state==='ok' ? 'Экспериментальный прогноз':'Нет актуального прогноза', 'warn');
+  const names={down:'падение',flat:'небольшое изменение',up:'рост'};
+  text('forecast-message',forecast && component.state==='ok' ? `Наибольшая вероятность: ${names[forecast.most_likely] || '—'}. ${conclusion}` : reasons[component?.reason] || 'Ожидаем модель и свежие данные.');
+  if(forecast && component.state==='ok') {
+    $('forecast-values').hidden=false;
+    text('forecast-time',`Снимок: ${date(forecast.asof_ms)} UTC · цена к ${date(forecast.target_ms)} UTC`);
+    const band=report.band_bps/100;
+    text('down-label',`Падение ниже −${band.toFixed(2)}%`);
+    text('flat-label',`Изменение в пределах ±${band.toFixed(2)}%`);
+    text('up-label',`Рост выше +${band.toFixed(2)}%`);
+    for(const cls of ['down','flat','up']) text(`prob-${cls}`,`${(forecast.probabilities[cls]*100).toFixed(1)}%`);
+    text('forecast-reference',number(forecast.reference_price)); text('forecast-price',number(forecast.estimated_price));
+    text('forecast-range',`${number(forecast.interval80_price[0])} – ${number(forecast.interval80_price[1])}`);
+    text('forecast-return',`Оценка среднего изменения: ${pct(forecast.expected_return_pct)}. Вероятности относятся к цене в конце десяти минут; промежуточный ход неизвестен.`);
+  }
+  const validation=report?.validation, summary=validation?.summary;
+  const ratio=v=>Number.isFinite(v) ? `${(v*100).toFixed(1)}%`:'—';
+  text('forecast-validation',summary ? `${validation.evaluated_folds} периодов · ${number(summary.observations)} неперекрывающихся исходов. Log loss: ${summary.log_loss.toFixed(4)} против ${summary.baseline_log_loss.toFixed(4)} у базы (меньше лучше). ${conclusion}`:'Обучение 30 дней (последние 5 — калибровка), затем проверка на следующих 10 днях. Для нескольких полных периодов нужна более длинная история.');
+  if(!validation?.folds?.length) empty($('forecast-folds'),'Полных проверочных периодов пока нет.',5);
+  else for(const fold of validation.folds) {
+    const m=fold.metrics;
+    row($('forecast-folds'),[`${date(fold.test_start_ms)} – ${date(fold.test_end_ms)}`,m ? number(m.observations):'Пропущен',m ? `${ratio(m.accuracy)} / ${ratio(m.baseline_accuracy)}`:'Мало данных',m ? `${m.log_loss.toFixed(4)} / ${m.baseline_log_loss.toFixed(4)}`:'—',m ? ratio(m.interval80_coverage):'—']);
+  }
+  const live=report?.prospective;
+  text('forecast-prospective',live ? `Проверка новых прогнозов: записано ${number(live.issued_predictions)}, оценено ${number(live.observations)} на сетке 10 минут. ${live.metrics ? `Log loss: ${live.metrics.log_loss.toFixed(4)} / база ${live.metrics.baseline_log_loss.toFixed(4)}.`:'Ожидаем завершённых исходов.'} Прогнозы сохраняются до появления исхода и не перезаписываются.`:'Журнал новых прогнозов начнёт накапливаться после обучения модели.');
+}
 function render(data) {
   text('instrument',`${data.symbol} · ${data.category} · 1 мин`);
   text('updated',`Проверено: ${date(data.generated_at_ms)} UTC`);
+  renderForecast(data.forecast);
   const q=data.quality;
   state('db-state',data.database.state==='ok' ? 'Доступна' : 'Нет связи',data.database.state==='ok' ? 'ok':'bad');
   text('db-note',data.database.state==='ok' ? 'Запрос качества выполнен' : 'Не удалось получить данные из БД');

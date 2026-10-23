@@ -86,12 +86,30 @@ services:
       timeout: 15s
       start_period: 60s
       retries: 3
+  forecaster:
+    <<: *worker
+    command: ["python", "-u", "forecaster.py"]
+    environment:
+      <<: *market_env
+      FORECAST_BAND_BPS: ${FORECAST_BAND_BPS:-10}
+      OPENBLAS_NUM_THREADS: "1"
+      OMP_NUM_THREADS: "1"
+    volumes:
+      - reports:/app/reports
+      - forecast_state:/app/forecast_state
+    healthcheck:
+      test: ["CMD", "python", "health.py", "forecaster"]
+      interval: 60s
+      timeout: 15s
+      start_period: 180s
+      retries: 3
   dashboard:
     <<: *worker
     command: ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--threads", "2", "--timeout", "30", "--access-logfile", "-", "--error-logfile", "-", "dashboard:application"]
     environment:
       <<: *market_env
       BACKFILL_DAYS: ${BACKFILL_DAYS:-30}
+      FORECAST_BAND_BPS: ${FORECAST_BAND_BPS:-10}
     ports:
       - "127.0.0.1:${DASHBOARD_PORT:-8080}:8080"
     volumes:
@@ -108,3 +126,4 @@ volumes:
   pgdata:
   reports:
   ingestion_state:
+  forecast_state:

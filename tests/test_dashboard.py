@@ -96,3 +96,33 @@ def test_cache_does_not_query_database_on_every_poll(monkeypatch):
     monkeypatch.setattr(dashboard.time,'monotonic',lambda:116)
     dashboard.current_status()
     assert build.call_count==2
+
+
+def test_forecast_expiration_and_missing_model_are_not_current(tmp_path,monkeypatch):
+    path=tmp_path/'forecast.json'
+    monkeypatch.setenv('FORECAST_REPORT_PATH',str(path))
+    now=10_000_000
+    base={'symbol':dashboard.SYMBOL,'category':dashboard.CATEGORY,'horizon_minutes':10,
+          'band_bps':10,'generated_at_ms':now,'status':'experimental',
+          'forecast':{'asof_ms':now-600000,'target_ms':now}}
+    path.write_text(json.dumps(base))
+    result=dashboard.forecast_status(now)
+    assert result['state']=='expired' and result['report']['forecast'] is None
+    base['forecast']={'asof_ms':now-1000,'target_ms':now+599000}
+    path.write_text(json.dumps(base))
+    assert dashboard.forecast_status(now)['state']=='ok'
+    base['generated_at_ms']=now-180001
+    path.write_text(json.dumps(base))
+    assert dashboard.forecast_status(now)['state']=='stale'
+    path.unlink()
+    assert dashboard.forecast_status(now)['state']=='unknown'
+
+
+def test_db_outage_hides_current_prediction_even_when_report_file_is_fresh(tmp_path,monkeypatch):
+    documents(tmp_path,monkeypatch)
+    monkeypatch.setattr(dashboard,'forecast_status',lambda _: {'state':'ok','report':{'forecast':{'target_ms':123}}})
+    monkeypatch.setattr(dashboard,'audit',Mock(side_effect=RuntimeError('offline')))
+    result=dashboard.build_status()
+    assert result['forecast']['state']=='unknown'
+    assert result['forecast']['reason']=='database_unavailable'
+    assert result['forecast']['report']['forecast'] is None

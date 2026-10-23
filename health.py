@@ -35,7 +35,11 @@ def check_backfill_state(now_ms=None):
 
 
 def main():
-    if len(sys.argv)>1 and sys.argv[1]=='analyst':
+    if len(sys.argv)>1 and sys.argv[1]=='forecaster':
+        path=Path(os.getenv('FORECAST_REPORT_PATH','reports/forecast.json'))
+        if time.time()-path.stat().st_mtime > 180:
+            raise RuntimeError('Forecast report stale')
+    elif len(sys.argv)>1 and sys.argv[1]=='analyst':
         path = Path(os.getenv('REPORT_PATH','reports/latest.json'))
         if time.time()-path.stat().st_mtime > 900:
             raise RuntimeError('Analysis report stale')

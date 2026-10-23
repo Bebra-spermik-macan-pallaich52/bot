@@ -8,8 +8,8 @@ RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
     pip install --no-cache-dir -r requirements.lock
 RUN groupadd --gid 10001 app && useradd --uid 10001 --gid app app \
-    && mkdir /app/reports /app/state && chown app:app /app/reports /app/state
-COPY --chmod=444 collector.py backfill.py analysis.py storage.py bybit.py health.py quality.py dashboard.py ./
+    && mkdir /app/reports /app/state /app/forecast_state && chown app:app /app/reports /app/state /app/forecast_state
+COPY --chmod=444 collector.py backfill.py analysis.py storage.py bybit.py health.py quality.py dashboard.py forecasting.py forecast_store.py forecaster.py ./
 COPY --chmod=755 web /app/web
 USER app
 CMD ["python", "-u", "collector.py"]

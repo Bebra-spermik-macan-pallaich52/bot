@@ -9,3 +9,4 @@ __pycache__/
 reports/
 backups/
 state/
+forecast_state/

@@ -9,6 +9,9 @@ services:
       REQUESTS_CA_BUNDLE: /run/proxy-ca.pem
       SSL_CERT_FILE: /run/proxy-ca.pem
   backfill: *cloud
+  forecaster:
+    build:
+      secrets: [proxy_ca]
   dashboard:
     build:
       secrets: [proxy_ca]

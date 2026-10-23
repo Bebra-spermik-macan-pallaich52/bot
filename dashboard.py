@@ -72,16 +72,48 @@ def component_status(now):
     return backfill, analyst
 
 
+def forecast_status(now):
+    report,error=read_document(Path(os.getenv('FORECAST_REPORT_PATH','reports/forecast.json')))
+    result={'state':'unknown','reason':error,'report':None}
+    if report is None:
+        return result
+    if (report.get('symbol')!=SYMBOL or report.get('category')!=CATEGORY or
+        report.get('horizon_minutes')!=10 or
+        report.get('band_bps')!=float(os.getenv('FORECAST_BAND_BPS','10'))):
+        result['reason']='different_config'
+        return result
+    generated=report.get('generated_at_ms')
+    if not isinstance(generated,int) or isinstance(generated,bool) or not 0<=now-generated<=180_000:
+        result.update(state='stale',reason='old_forecast_report')
+        return result
+    result.update(state='waiting',reason=report.get('reason'),report=report)
+    forecast=report.get('forecast')
+    if report.get('status')=='error':
+        result['state']='error'
+    elif forecast is not None:
+        asof,target=forecast.get('asof_ms'),forecast.get('target_ms')
+        if (not isinstance(asof,int) or not isinstance(target,int) or
+            target-asof!=600_000 or not asof<=now<target):
+            result.update(state='expired',reason='expired_forecast',report={**report,'forecast':None})
+        else:
+            result.update(state='ok',reason=None)
+    return result
+
+
 def build_status():
     now = int(time.time()*1000)
     backfill, analyst = component_status(now)
     status = {'generated_at_ms':now,'symbol':SYMBOL,'category':CATEGORY,
-              'database':{'state':'ok'},'quality':None,'backfill':backfill,'analyst':analyst}
+              'database':{'state':'ok'},'quality':None,'backfill':backfill,'analyst':analyst,'forecast':forecast_status(now)}
     try:
         status['quality'] = audit(int(os.getenv('BACKFILL_DAYS','30')),now_ms=now)
     except Exception as err:
         logging.warning('Quality query failed: %s', type(err).__name__)
         status['database'] = {'state':'unavailable','reason':'query_failed'}
+        forecast=status['forecast']
+        if forecast['report'] is not None:
+            status['forecast']={**forecast,'state':'unknown','reason':'database_unavailable',
+                                'report':{**forecast['report'],'forecast':None}}
     status['ready'] = bool(status['quality'] and status['quality']['ready'] and
                            backfill['state']=='ok' and analyst['state']=='ok')
     return status

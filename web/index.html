@@ -10,6 +10,17 @@
     <header><div class="brand"><span class="mark">⌁</span><div><h1>Crypto Pattern Lab</h1><p>Исследование рынка · Bybit</p></div></div><span class="tag">ТОЛЬКО НАБЛЮДЕНИЕ</span></header>
     <div class="heading"><div><p class="eyebrow">ОБЗОР СИСТЕМЫ</p><h2>Состояние данных <span id="instrument">—</span></h2><p>Свежесть, полнота истории и результаты исследований в одном месте.</p></div><div class="refresh"><button id="refresh" type="button">Обновить</button><span id="updated" aria-live="polite">Загрузка…</span></div></div>
     <div id="connection-error" class="alert error" role="alert" hidden>Нет связи с панелью. Показанные ранее данные могли устареть. Повторяем запрос автоматически.</div>
+    <section class="panel forecast-panel" aria-label="Прогноз на десять минут">
+      <div class="section-head"><div><p class="eyebrow">ПРОГНОЗ ДВИЖЕНИЯ</p><h3>Цена через 10 минут</h3><p id="forecast-time">От закрытия последней доступной свечи, не траектория внутри периода.</p></div><span id="forecast-badge" class="badge">Проверяем…</span></div>
+      <div id="forecast-message" class="alert">Ожидаем расчёт вероятностей.</div>
+      <div id="forecast-values" hidden>
+        <div class="probabilities"><div><span id="down-label">Падение</span><strong id="prob-down">—</strong></div><div><span id="flat-label">Небольшое изменение</span><strong id="prob-flat">—</strong></div><div><span id="up-label">Рост</span><strong id="prob-up">—</strong></div></div>
+        <div class="metrics forecast-prices"><div><span>Цена в момент прогноза</span><strong id="forecast-reference">—</strong></div><div><span>Оценка среднего к концу периода</span><strong id="forecast-price">—</strong></div><div><span>Описательный диапазон 80%</span><strong id="forecast-range">—</strong></div></div>
+        <p class="muted" id="forecast-return"></p>
+      </div>
+      <div class="forecast-evaluation"><h4>Проверка на последовательных будущих периодах</h4><p id="forecast-validation">Ещё нет результатов исторической проверки.</p><div class="table-wrap"><table><thead><tr><th>Период test UTC</th><th>Прогнозов</th><th>Точность / база</th><th>Log loss / база ↓</th><th>Попадание в диапазон 80%</th></tr></thead><tbody id="forecast-folds"><tr><td colspan="5">Ожидаем проверку.</td></tr></tbody></table></div><p id="forecast-prospective" class="muted"></p></div>
+      <p class="muted">Вероятности экспериментальные. База — частоты классов на прошлом. Высокая точность может означать частый выбор «небольшое изменение». Диапазон построен по прошлым исходам; фактическое покрытие показано в проверке. Это не гарантированный путь цены и не сигнал к торговле.</p>
+    </section>
     <section class="services" aria-label="Состояние компонентов">
       <article class="service"><span>PostgreSQL</span><strong id="db-state">Проверяем…</strong><p id="db-note">Доступность базы</p></article>
       <article class="service"><span>Поступление свечей</span><strong id="live-state">Проверяем…</strong><p id="live-note">Свежесть и последние 10 минут</p></article>

@@ -114,3 +114,60 @@ def test_real_quality_audit_and_read_only_dashboard(database,tmp_path,monkeypatc
     assert status['ready'] is False
     with storage.connect() as conn:
         assert conn.execute('SELECT count(*) FROM candles').fetchone()[0]==1441
+
+
+def test_forecast_journal_is_immutable_prospective_and_scores_only_after_target(database):
+    from forecast_store import setup_forecasts,record_forecast,prospective_summary
+    from forecasting import Config
+    config=Config();setup_forecasts()
+    with storage.connect() as conn:
+        conn.execute('TRUNCATE forecasts')
+    asof=6_060_000
+    live={'asof_ms':asof,'target_ms':asof+600000,'reference_price':100.,
+          'probabilities':{'down':.2,'flat':.6,'up':.2},'model_id':'fixture',
+          'expected_return_pct':0.,'interval80_return_pct':[-.2,.2]}
+    saved=record_forecast(live,config,[.3,.4,.3],now_ms=asof+1000)
+    changed={**live,'probabilities':{'down':.1,'flat':.1,'up':.8}}
+    assert record_forecast(changed,config,[.3,.4,.3],now_ms=asof+2000)==saved
+    assert prospective_summary(config,now_ms=asof+599999)['observations']==0
+    storage.save_rows([row(asof+600000-60000)])
+    result=prospective_summary(config,now_ms=asof+600000)
+    assert result['issued_predictions']==1 and result['observations']==1
+    assert result['metrics']['class_counts']==[0,0,1]
+    with pytest.raises(ValueError,match='stale/backdated'):
+        record_forecast(live,config,[.3,.4,.3],now_ms=asof+90001)
+    # An overlapping minute prediction exists in the journal but is not another
+    # independent scored observation on the fixed ten-minute source grid.
+    overlapping={**live,'asof_ms':asof+60000,'target_ms':asof+660000}
+    record_forecast(overlapping,config,[.3,.4,.3],now_ms=asof+61000)
+    storage.save_rows([row(asof+660000-60000)])
+    result=prospective_summary(config,now_ms=asof+660000)
+    assert result['issued_predictions']==2 and result['observations']==1
+
+
+def test_forecast_worker_real_db_model_cache_and_waiting_state(database,tmp_path,monkeypatch):
+    import json
+    import forecaster
+    from forecast_store import setup_forecasts
+    from test_forecasting import market,CFG
+    setup_forecasts()
+    with storage.connect() as conn:
+        conn.execute('TRUNCATE forecasts')
+    monkeypatch.setenv('FORECAST_REPORT_PATH',str(tmp_path/'forecast.json'))
+    monkeypatch.setenv('FORECAST_STATE_DIR',str(tmp_path/'models'))
+    waiting=forecaster.run(CFG)
+    assert waiting['status']=='waiting' and waiting['forecast'] is None
+    assert waiting['reason']=='no_candles'
+    data=market(1800)
+    boundary=int(time.time()*1000)//60000*60000
+    data['start_ms']+=boundary-1800*60000
+    storage.save_rows([storage.candle_row(int(r.start_ms),[r.open,r.high,r.low,r.close,r.volume,1000])
+                       for r in data.itertuples()])
+    first=forecaster.run(CFG)
+    assert first['status']=='experimental'
+    assert first['forecast']['target_ms']==boundary+600000
+    second=forecaster.run(CFG)
+    assert second['forecast']==first['forecast']
+    assert second['prospective']['issued_predictions']==1
+    assert json.loads((tmp_path/'forecast.json').read_text())['protocol']==CFG.protocol
+    assert (tmp_path/'models/model.joblib').exists()
