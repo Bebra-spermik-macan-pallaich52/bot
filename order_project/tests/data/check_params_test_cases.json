@@ -1,0 +1,11 @@
+[
+  {"id": "A", "quantity": 10, "status": "Корректно"},
+  {"id": "AA", "quantity": 40, "status": "Некорректно"},
+  {"id": "A", "quantity": 0, "status": "Некорректно"},
+  {"id": "ZOMX", "quantity": 1.5, "status": "Некорректно"},
+  {"id": "ZOMX", "quantity": "2t", "status": "Некорректно"},
+  {"id": "ABE", "quantity": -3, "status": "Некорректно"},
+  {"id": "ABCD", "quantity": 10, "status": "Корректно"},
+  {"id": "XYZ", "quantity": null, "status": "Некорректно"},
+  {"id": "LAVN", "quantity": 52, "status": "Корректно"}
+]

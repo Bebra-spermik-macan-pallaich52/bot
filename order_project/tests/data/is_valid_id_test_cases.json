@@ -1,0 +1,9 @@
+[
+  {"id": "A", "valid": true},
+  {"id": "AA", "valid": false},
+  {"id": "BC", "valid": true},
+  {"id": "ZOMX", "valid": true},
+  {"id": "ZOZ", "valid": false},
+  {"id": "ABE", "valid": true},
+  {"id": "abc", "valid": false}
+]

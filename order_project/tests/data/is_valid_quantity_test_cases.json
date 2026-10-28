@@ -1,0 +1,8 @@
+[
+  {"quantity": 1, "valid": true},
+  {"quantity": 10, "valid": true},
+  {"quantity": 100, "valid": true},
+  {"quantity": -1, "valid": false},
+  {"quantity": 1.5, "valid": false},
+  {"quantity": null, "valid": false}
+]
