@@ -12,21 +12,22 @@ def read_cases(name, fields):
     return [tuple(row[field] for field in fields) for row in rows]
 
 
+# Исходные JSON неизменны; ниже добавлены собственные представители классов.
 ID_CASES = read_cases("is_valid_id", ("id", "valid")) + [
-    ("", False), ("ABCD", True), ("ABCDE", False), ("A1", False),
-    ("АБ", False), ("A B", False), (None, False),
+    ("", False), ("WXYZ", True), ("KLMNO", False), ("R7", False),
+    ("ЖЮ", False), ("T U", False), (42, False),
 ]
 QUANTITY_CASES = read_cases("is_valid_quantity", ("quantity", "valid")) + [
     (0, False), ("1", True), ("0", False), ("9999999999", True),
-    ("001", True), ("", False), ("2t", False), (" 1 ", False),
-    (True, False), ("1.5", False),
+    ("0008", True), ("", False), ("7kg", False), ("8\t", False),
+    (False, False), ("2.75", False),
 ]
 ORDER_CASES = read_cases("check_params", ("id", "quantity", "status")) + [
-    ("AA", 0, "Некорректно"),
-    ("A", "1", "Корректно"),
-    ("ABCD", "9999999999", "Корректно"),
-    ("ABCDE", "1", "Некорректно"),
-    ("", "", "Некорректно"),
+    ("QQ", "-6", "Некорректно"),
+    ("R", "0008", "Корректно"),
+    ("WXYZ", "9999999999", "Корректно"),
+    ("KLMNO", "24", "Некорректно"),
+    ("T U", "7kg", "Некорректно"),
 ]
 
 
