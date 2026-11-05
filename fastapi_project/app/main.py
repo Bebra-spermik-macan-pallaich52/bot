@@ -6,6 +6,8 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from app.db import init_db, close_db
 from app.api.v1.role_api_router import router as role_router
 from app.api.v1.profile_api_router import router as profile_router
+from app.api.v1.client_api_router import router as client_router
+from app.api.v1.tarif_api_router import router as tarif_router
 
 logger = logging.getLogger(__name__)
 
@@ -22,9 +24,11 @@ async def on_startup(app: FastAPI):
 # Lifespan смонтированного приложения автоматически не запускается:
 # основной сервер управляет БД; app_v1 поддерживает и отдельный запуск.
 main_app = FastAPI(lifespan=on_startup, docs_url=None, redoc_url=None, openapi_url=None)
-app_v1 = FastAPI(title="API v1", version="1.0.0", lifespan=on_startup)
+app_v1 = FastAPI(title="Клиенты и тарифы — API v1", version="1.0.0", lifespan=on_startup)
 app_v1.include_router(role_router)
 app_v1.include_router(profile_router)
+app_v1.include_router(client_router)
+app_v1.include_router(tarif_router)
 main_app.mount("/api/v1", app_v1)
 
 
