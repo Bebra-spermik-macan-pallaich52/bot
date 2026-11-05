@@ -6,6 +6,10 @@
 
 ## Запуск
 
+Самый простой вариант — `python3 scripts/start.py` (Windows: `py scripts/start.py`).
+Он создаёт отдельную базу `telecom`, её пароль и запускает API в Docker.
+Пошаговое описание — в [readme.md](readme.md). Ниже описан ручной запуск.
+
 Нужны Python 3.10+ и работающий PostgreSQL. Команды выполняются из `fastapi_project`.
 
 ```bash
@@ -14,11 +18,11 @@ python3 -m venv .venv
 cp .env.example .env
 ```
 
-Создайте пустую базу `practice_api` в PostgreSQL, впишите строку подключения
+Создайте пустую базу `telecom` в PostgreSQL, впишите строку подключения
 в `.env` (не добавляйте этот файл в Git):
 
 ```dotenv
-DATABASE_URL="postgresql+psycopg://DB_USER:DB_PASSWORD@localhost:5432/practice_api"
+DATABASE_URL="postgresql+psycopg://DB_USER:DB_PASSWORD@localhost:5432/telecom"
 ```
 
 Замените пользователя и пароль своими значениями. Затем:
@@ -179,4 +183,4 @@ TEST_DATABASE_URL='postgresql+psycopg://DB_USER:DB_PASSWORD@localhost:5432/telec
 
 Проверяются маршруты задания, JOIN, нулевые счётчики, границы года и цены,
 назначение/отключение тарифа, сохранение полей при обновлении, смена номера,
-конфликты, ошибки валидации, Swagger/OpenAPI и совместимость с прежними ролями/профилями.
+конфликты, ошибки валидации, Swagger/OpenAPI и отсутствие лишних маршрутов и таблиц.

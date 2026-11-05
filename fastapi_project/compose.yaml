@@ -1,0 +1,37 @@
+name: telecom-api
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: telecom
+      POSTGRES_USER: telecom
+      POSTGRES_PASSWORD: ${TELECOM_DB_PASSWORD:?Run python scripts/start.py first}
+    volumes:
+      - telecom_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U telecom -d telecom"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://telecom:${TELECOM_DB_PASSWORD:?Run python scripts/start.py first}@db:5432/telecom
+    ports:
+      - "127.0.0.1:${TELECOM_API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/tarifs', timeout=5)"]
+      interval: 5s
+      timeout: 6s
+      start_period: 10s
+      retries: 12
+    restart: unless-stopped
+
+volumes:
+  telecom_data:

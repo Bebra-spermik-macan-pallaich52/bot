@@ -184,18 +184,14 @@ def test_create_validation_and_missing_tarif(api):
     assert len(api.get(BASE + "/clients").json()) == 1
 
 
-def test_openapi_docs_and_existing_routes(api):
+def test_openapi_docs_and_telecom_only_schema(api):
     assert api.get(BASE + "/docs").status_code == 200
     assert api.get(BASE + "/redoc").status_code == 200
     spec = api.get(BASE + "/openapi.json").json()
     for path in ("/tarifs", "/clients/search/phone", "/clients/tarif", "/clients/with-tarif"):
         assert path in spec["paths"]
-    response = api.post(BASE + "/roles/", json={"name_role": "student"})
-    assert response.status_code == 201
-    assert api.get(BASE + "/roles/").json() == [response.json()]
-    response = api.post(BASE + "/profiles/", json={
-        "first_name": "Иван", "role_id": response.json()["id_role"],
-        "email": "ivan@example.com", "password": "Example-pass-1",
-    })
-    assert response.status_code == 201
-    assert "password" not in response.json()
+    assert all(path.startswith(("/clients", "/tarifs")) for path in spec["paths"])
+    assert api.get(BASE + "/roles/").status_code == 404
+    assert api.get(BASE + "/profiles/").status_code == 404
+    from sqlmodel import SQLModel
+    assert set(SQLModel.metadata.tables) == {"client", "tarif"}
