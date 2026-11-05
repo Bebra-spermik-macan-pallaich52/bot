@@ -1,9 +1,0 @@
-# Managed cloud: provide the system CA to pip without disabling TLS verification.
-services:
-  api:
-    build:
-      secrets: [proxy_ca]
-
-secrets:
-  proxy_ca:
-    file: /etc/ssl/certs/ca-certificates.crt

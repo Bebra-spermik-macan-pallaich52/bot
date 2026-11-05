@@ -6,10 +6,6 @@
 
 ## Запуск
 
-Самый простой вариант — `python3 scripts/start.py` (Windows: `py scripts/start.py`).
-Он создаёт отдельную базу `telecom`, её пароль и запускает API в Docker.
-Пошаговое описание — в [readme.md](readme.md). Ниже описан ручной запуск.
-
 Нужны Python 3.10+ и работающий PostgreSQL. Команды выполняются из `fastapi_project`.
 
 ```bash
