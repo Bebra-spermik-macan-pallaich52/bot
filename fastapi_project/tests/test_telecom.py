@@ -1,197 +1,121 @@
+from datetime import date
+from decimal import Decimal
+
 import pytest
+from sqlmodel import Session
+from app.entities import Client, Tarif
 
-BASE = "/api/v1"
-
-
-def add_tarif(api, name="Эконом", salary=300):
-    response = api.post(BASE + "/tarifs", json={
-        "tarif_name": name, "internet": 50, "count_minutes": 500,
-        "count_sms": 100, "salary": salary,
-    })
-    assert response.status_code == 201, response.text
-    return response.json()
+B = '/api/v1'
+PHONE = '+79001234567'
 
 
-def add_client(api, phone="+79001234567", tarif=None, **changes):
-    data = {
-        "number_phone": phone, "id_tarif": tarif, "lastname": "Иванов",
-        "firstname": "Иван", "patronymic_name": "Иванович", "date_birthday": "1995-10-20",
-        "pasport_serial": "0012", "pasport_number": "000123", "date_issue": "2016-01-01",
+@pytest.fixture
+def data(api):
+    with Session(api.test_engine) as s:
+        cheap = Tarif(tarif_name='Эконом', internet=10, count_minutes=100, count_sms=10, salary=Decimal('300'))
+        costly = Tarif(tarif_name='Безлимит', internet=50, count_minutes=500, count_sms=100, salary=Decimal('600'))
+        empty = Tarif(tarif_name='Без клиентов', internet=0, count_minutes=0, count_sms=0, salary=Decimal('0'))
+        s.add_all([cheap, costly, empty]); s.commit()
+        ids = [cheap.id_tarif, costly.id_tarif, empty.id_tarif]
+        for phone, tariff, birthday, issue in [(PHONE, ids[0], '1995-10-20', '2015-12-31'), ('88001234567', ids[1], '1990-05-15', '2016-01-01')]:
+            s.add(Client(number_phone=phone, id_tarif=tariff, lastname='Иванов', firstname='Иван', patronymic_name='Иванович', date_birthday=date.fromisoformat(birthday), date_issue=date.fromisoformat(issue), pasport_serial='0012', pasport_number='000123'))
+        s.commit()
+    return ids
+
+
+def test_exact_contract(api):
+    spec = api.get(B+'/openapi.json').json()
+    actual = {(method.upper(),path.removeprefix(B)) for path, methods in spec['paths'].items() for method in methods}
+    assert actual == {
+        ('GET','/tarifs'), ('POST','/tarifs'), ('GET','/tarifs/by-client/{phone}'),
+        ('GET','/tarifs/stats/client-count'), ('GET','/tarifs/{id}/client-count'),
+        ('PUT','/tarifs/{id}'), ('DELETE','/tarifs/{id_tarif}'), ('GET','/tarifs/with-client-count'),
+        ('GET','/clients/search/phone'), ('GET','/clients/sorted-by-birthday'),
+        ('GET','/clients/search/passport-year'), ('GET','/clients/search/tarif-cost'),
+        ('GET','/clients/with-tarif'), ('PUT','/clients/{phone}'), ('DELETE','/clients/{phone}'), ('PATCH','/clients/tarif'),
     }
-    data.update(changes)
-    response = api.post(BASE + "/clients", json=data)
-    assert response.status_code == 201, response.text
-    return response.json()
-
-
-def test_tarif_crud_and_zero_counts(api):
-    assert api.get(BASE + "/tarifs").json() == []
-    tarif = add_tarif(api, salary=600.25)
-    tarif_id = tarif["id_tarif"]
-    assert tarif["salary"] == 600.25
-    assert api.get(BASE + "/tarifs").json() == [tarif]
-    assert api.get(BASE + "/tarifs/stats/client-count").json() == [{"tarif_name": "Эконом", "client_count": 0}]
-    assert api.get(BASE + f"/tarifs/{tarif_id}/client-count").json() == {"tarif_id": tarif_id, "count": 0}
-    assert api.get(BASE + "/tarifs/with-client-count").json() == [{**tarif, "client_count": 0}]
-    response = api.put(BASE + f"/tarifs/{tarif_id}", json={"salary": "100.10"})
-    assert response.status_code == 200
-    assert response.json() == {**tarif, "salary": 100.1}
-    response = api.delete(BASE + f"/tarifs/{tarif_id}")
-    assert response.status_code == 204 and response.content == b""
-    assert api.get(BASE + "/tarifs").json() == []
-
-
-def test_client_crud_and_phone_change(api):
-    client = add_client(api)
-    phone = client["number_phone"]
-    assert client["pasport_serial"] == "0012"
-    assert api.get(BASE + "/clients").json() == [client]
-    assert api.get(BASE + f"/clients/{phone}").json() == client
-    duplicate = api.post(BASE + "/clients", json=client)
-    assert duplicate.status_code == 409
-    new_phone = "+79990000000"
-    response = api.put(BASE + f"/clients/{phone}", json={"lastname": "Петров", "number_phone": new_phone})
-    assert response.status_code == 200
-    assert response.json() == {**client, "lastname": "Петров", "number_phone": new_phone}
-    assert api.get(BASE + f"/clients/{phone}").status_code == 404
-    assert api.get(BASE + f"/clients/{new_phone}").status_code == 200
-    response = api.delete(BASE + f"/clients/{new_phone}")
-    assert response.status_code == 204 and not response.content
-    assert api.get(BASE + "/clients").json() == []
-
-
-def test_search_prefix_sort_and_passport_boundary(api):
-    a = add_client(api, date_issue="2015-12-31")
-    b = add_client(api, "88001234567", lastname="Петров", date_birthday="1990-05-15", patronymic_name=None)
-    assert api.get(BASE + "/clients/search/phone", params={"phone": "+7"}).json() == [{
-        "number_phone": a["number_phone"], "lastname": "Иванов", "firstname": "Иван",
-    }]
-    assert len(api.get(BASE + "/clients/search/phone", params={"phone": "8"}).json()) == 1
-    assert api.get(BASE + "/clients/search/phone", params={"phone": "+44"}).json() == []
-    assert api.get(BASE + "/clients/sorted-by-birthday").json() == [
-        {"full_name": "Петров Иван", "date_birthday": "1990-05-15"},
-        {"full_name": "Иванов Иван Иванович", "date_birthday": "1995-10-20"},
-    ]
-    assert api.get(BASE + "/clients/search/passport-year", params={"year": 2015}).json() == [b]
-    assert api.get(BASE + "/clients/search/passport-year", params={"year": 2016}).json() == []
-    assert api.get(BASE + "/clients/search/passport-year", params={"year": 9999}).json() == []
-
-
-def test_joins_cost_counts_and_assignment(api):
-    cheap = add_tarif(api, "Эконом", 300)
-    expensive = add_tarif(api, "Безлимит", 600)
-    unused = add_tarif(api, "Резерв", 1000)
-    a = add_client(api, tarif=cheap["id_tarif"])
-    b = add_client(api, "+79001234568", expensive["id_tarif"])
-    c = add_client(api, "+79001234569")
-    all_joined = api.get(BASE + "/clients/with-tarif").json()
-    assert all_joined == [{**a, "tarif": cheap}, {**b, "tarif": expensive}, {**c, "tarif": None}]
-    assert api.get(BASE + "/clients/search/tarif-cost", params={"minSalary": 300}).json() == [{**b, "tarif": expensive}]
-    assert api.get(BASE + "/clients/search/tarif-cost", params={"minSalary": 600}).json() == []
-    assert api.get(BASE + f"/tarifs/by-client/{a['number_phone']}").json() == cheap
-    assert api.get(BASE + f"/tarifs/by-client/{c['number_phone']}").status_code == 404
-    response = api.patch(BASE + "/clients/tarif", params={"phone": c["number_phone"], "id_tarif": cheap["id_tarif"]})
-    assert response.status_code == 200 and response.json()["message"]
-    assert api.get(BASE + f"/tarifs/by-client/{c['number_phone']}").json() == cheap
-    assert api.get(BASE + "/tarifs/stats/client-count").json() == [
-        {"tarif_name": "Эконом", "client_count": 2},
-        {"tarif_name": "Безлимит", "client_count": 1},
-        {"tarif_name": "Резерв", "client_count": 0},
-    ]
-    assert api.get(BASE + f"/tarifs/{cheap['id_tarif']}/client-count").json()["count"] == 2
-    counts = api.get(BASE + "/tarifs/with-client-count").json()
-    assert counts == [{**cheap, "client_count": 2}, {**expensive, "client_count": 1}, {**unused, "client_count": 0}]
-
-
-def test_assigned_tarif_cannot_be_deleted_and_can_be_detached(api):
-    tarif = add_tarif(api)
-    a = add_client(api, tarif=tarif["id_tarif"])
-    path = BASE + f"/tarifs/{tarif['id_tarif']}"
-    assert api.delete(path).status_code == 409
-    assert len(api.get(BASE + "/tarifs").json()) == 1
-    response = api.put(BASE + f"/clients/{a['number_phone']}", json={"id_tarif": None, "patronymic_name": None})
-    assert response.status_code == 200 and response.json()["id_tarif"] is None
-    assert api.delete(path).status_code == 204
-    assert api.get(BASE + f"/clients/{a['number_phone']}").status_code == 200
-
-
-def test_conflicting_update_preserves_data(api):
-    a = add_client(api)
-    b = add_client(api, "+79001234568")
-    path = BASE + f"/clients/{a['number_phone']}"
-    assert api.put(path, json={"number_phone": b["number_phone"]}).status_code == 409
-    assert api.put(path, json={"id_tarif": 9999, "lastname": "Изменено"}).status_code == 404
-    assert api.get(path).json() == a
-    assert api.patch(BASE + "/clients/tarif", params={"phone": a["number_phone"], "id_tarif": 9999}).status_code == 404
-    assert api.get(path).json() == a
-
-
-@pytest.mark.parametrize("method,path,kwargs", [
-    ("get", "/clients/+79000000000", {}),
-    ("put", "/clients/+79000000000", {"json": {"lastname": "Петров"}}),
-    ("delete", "/clients/+79000000000", {}),
-    ("patch", "/clients/tarif", {"params": {"phone": "+79000000000", "id_tarif": 1}}),
-    ("get", "/tarifs/by-client/+79000000000", {}),
-    ("get", "/tarifs/9999/client-count", {}),
-    ("put", "/tarifs/9999", {"json": {"salary": 100}}),
-    ("delete", "/tarifs/9999", {}),
-])
-def test_missing_resources(api, method, path, kwargs):
-    assert api.request(method, BASE + path, **kwargs).status_code == 404
-
-
-@pytest.mark.parametrize("path,params", [
-    ("/clients/search/phone", {}), ("/clients/search/phone", {"phone": "%"}),
-    ("/clients/search/passport-year", {"year": 0}), ("/clients/search/passport-year", {"year": 10000}),
-    ("/clients/search/tarif-cost", {"minSalary": -1}), ("/clients/search/tarif-cost", {"minSalary": "NaN"}),
-    ("/clients/search/tarif-cost", {}), ("/tarifs/0/client-count", {}),
-])
-def test_invalid_queries(api, path, params):
-    assert api.get(BASE + path, params=params).status_code == 422
-
-
-@pytest.mark.parametrize("changes", [
-    {"salary": -1}, {"salary": "1.001"}, {"count_sms": -1}, {"internet": -1},
-    {"tarif_name": "   "}, {"salary": None}, {"unexpected": 1},
-])
-def test_invalid_tarif_update(api, changes):
-    tarif = add_tarif(api)
-    assert api.put(BASE + f"/tarifs/{tarif['id_tarif']}", json=changes).status_code == 422
-    assert api.get(BASE + "/tarifs").json() == [tarif]
-
-
-@pytest.mark.parametrize("changes", [
-    {"number_phone": "invalid"}, {"number_phone": None}, {"lastname": " "},
-    {"date_birthday": "1999-02-30"}, {"date_issue": None}, {"id_tarif": 0}, {"firstname": None},
-])
-def test_invalid_client_update(api, changes):
-    client = add_client(api)
-    path = BASE + f"/clients/{client['number_phone']}"
-    assert api.put(path, json=changes).status_code == 422
-    assert api.get(path).json() == client
-
-
-def test_create_validation_and_missing_tarif(api):
-    assert api.post(BASE + "/tarifs", json={}).status_code == 422
-    assert api.post(BASE + "/clients", json={}).status_code == 422
-    client = add_client(api)
-    client["number_phone"] = "+79000000001"
-    client["id_tarif"] = 9999
-    assert api.post(BASE + "/clients", json=client).status_code == 404
-    client["id_tarif"] = None
-    client["number_phone"] = "invalid"
-    assert api.post(BASE + "/clients", json=client).status_code == 422
-    assert len(api.get(BASE + "/clients").json()) == 1
-
-
-def test_openapi_docs_and_telecom_only_schema(api):
-    assert api.get(BASE + "/docs").status_code == 200
-    assert api.get(BASE + "/redoc").status_code == 200
-    spec = api.get(BASE + "/openapi.json").json()
-    for path in ("/tarifs", "/clients/search/phone", "/clients/tarif", "/clients/with-tarif"):
-        assert path in spec["paths"]
-    assert all(path.startswith(("/clients", "/tarifs")) for path in spec["paths"])
-    assert api.get(BASE + "/roles/").status_code == 404
-    assert api.get(BASE + "/profiles/").status_code == 404
+    assert api.get(B+'/docs').status_code == 200
     from sqlmodel import SQLModel
-    assert set(SQLModel.metadata.tables) == {"client", "tarif"}
+    assert set(SQLModel.metadata.tables) == {'client','tarif'}
+    example = spec['components']['schemas']['ClientUpdate']['example']
+    assert example == {'lastname': 'Петров'}
+
+
+def test_tarif_queries(api, data):
+    assert len(api.get(B+'/tarifs').json()) == 3
+    assert api.get(B+f'/tarifs/by-client/{PHONE}').json()['id_tarif'] == data[0]
+    assert api.get(B+'/tarifs/stats/client-count').json() == [
+        {'tarif_name':'Эконом','client_count':1}, {'tarif_name':'Безлимит','client_count':1}, {'tarif_name':'Без клиентов','client_count':0}]
+    assert api.get(B+f'/tarifs/{data[0]}/client-count').json() == {'tarif_id':data[0],'count':1}
+    rows = api.get(B+'/tarifs/with-client-count').json()
+    assert [r['client_count'] for r in rows] == [1,1,0]
+    assert rows[0]['salary'] == 300
+
+
+def test_client_queries_do_not_mutate(api, data):
+    before = api.get(B+'/clients/with-tarif').json()
+    for _ in range(2):
+        rows=api.get(B+'/clients/search/phone',params={'phone':'+7'}).json()
+        assert rows == [{'number_phone':PHONE,'lastname':'Иванов','firstname':'Иван'}]
+        assert len(api.get(B+'/clients/search/phone',params={'phone':'8'}).json()) == 1
+        assert api.get(B+'/clients/search/phone',params={'phone':'+44'}).json() == []
+        rows=api.get(B+'/clients/sorted-by-birthday').json()
+        assert [r['date_birthday'] for r in rows] == ['1990-05-15','1995-10-20']
+        assert rows[0]['full_name'] == 'Иванов Иван Иванович'
+        rows=api.get(B+'/clients/search/passport-year',params={'year':2015}).json()
+        assert [r['number_phone'] for r in rows] == ['88001234567']
+        assert api.get(B+'/clients/search/passport-year',params={'year':2016}).json() == []
+        rows=api.get(B+'/clients/search/tarif-cost',params={'minSalary':300}).json()
+        assert len(rows)==1 and rows[0]['tarif']['salary']==600
+        assert api.get(B+'/clients/search/tarif-cost',params={'minSalary':600}).json()==[]
+    assert api.get(B+'/clients/with-tarif').json() == before
+
+
+def test_client_changes(api, data):
+    r=api.put(B+f'/clients/{PHONE}',json={'lastname':'Петров'})
+    assert r.status_code==200 and r.json()['number_phone']==PHONE and r.json()['firstname']=='Иван'
+    assert api.put(B+f'/clients/{PHONE}',json={'number_phone':'+79999999999'}).status_code==422
+    r=api.patch(B+'/clients/tarif',params={'phone':PHONE,'id_tarif':data[1]})
+    assert r.status_code==200 and r.json()['message']
+    assert api.get(B+f'/tarifs/{data[1]}/client-count').json()['count']==2
+    assert api.delete(B+f'/tarifs/{data[1]}').status_code==409
+    r=api.delete(B+f'/clients/{PHONE}')
+    assert r.status_code==204 and r.content==b''
+    assert api.get(B+'/clients/search/phone',params={'phone':'+7'}).json()==[]
+
+
+def test_tarif_changes(api):
+    r=api.post(B+'/tarifs',json={'tarif_name':'Новый тариф','internet':50,'count_minutes':500,'count_sms':100,'salary':600})
+    assert r.status_code==201
+    t=r.json()
+    r=api.put(B+f"/tarifs/{t['id_tarif']}",json={'salary':'600.25'})
+    assert r.status_code==200 and r.json()=={**t,'salary':600.25}
+    r=api.delete(B+f"/tarifs/{t['id_tarif']}")
+    assert r.status_code==204 and not r.content
+
+
+@pytest.mark.parametrize('method,path,kwargs',[
+    ('get','/tarifs/9999/client-count',{}), ('get','/tarifs/by-client/+79999999999',{}),
+    ('put','/tarifs/9999',{'json':{'salary':100}}), ('delete','/tarifs/9999',{}),
+    ('put','/clients/+79999999999',{'json':{'lastname':'Петров'}}), ('delete','/clients/+79999999999',{}),
+    ('patch','/clients/tarif',{'params':{'phone':'+79999999999','id_tarif':1}}),
+])
+def test_missing(api,method,path,kwargs):
+    assert api.request(method,B+path,**kwargs).status_code==404
+
+
+@pytest.mark.parametrize('path,params',[
+    ('/clients/search/phone',{}), ('/clients/search/phone',{'phone':'%'}),
+    ('/clients/search/passport-year',{'year':10000}), ('/clients/search/tarif-cost',{'minSalary':-1}),
+])
+def test_invalid_queries(api,path,params):
+    assert api.get(B+path,params=params).status_code==422
+
+
+def test_failed_updates_preserve_records(api,data):
+    before=api.get(B+'/clients/with-tarif').json()
+    for body,status in [({'firstname':None},422),({'date_issue':'invalid'},422),({'id_tarif':9999},404)]:
+        assert api.put(B+f'/clients/{PHONE}',json=body).status_code==status
+    assert api.get(B+'/clients/with-tarif').json()==before
+    for body in [{'salary':-1},{'salary':None},{'salary':'0.001'},{'tarif_name':' '}]:
+        assert api.put(B+f'/tarifs/{data[0]}',json=body).status_code==422

@@ -20,7 +20,7 @@ if url.get_backend_name() != "sqlite" and not (url.database or "").endswith("_te
 os.environ["DATABASE_URL"] = TEST_URL
 
 import app.main as main
-from app.db.session import get_session
+from app.database import get_session
 
 
 @pytest.fixture
@@ -50,12 +50,13 @@ def api(monkeypatch):
 
     monkeypatch.setattr(main, "init_db", lambda: SQLModel.metadata.create_all(engine))
     monkeypatch.setattr(main, "close_db", engine.dispose)
-    main.app_v1.dependency_overrides[get_session] = session_override
+    main.main_app.dependency_overrides[get_session] = session_override
     try:
         with TestClient(main.main_app) as client:
+            client.test_engine = engine
             yield client
     finally:
-        main.app_v1.dependency_overrides.clear()
+        main.main_app.dependency_overrides.clear()
         engine.dispose()
         if admin is not None:
             with admin.begin() as connection:

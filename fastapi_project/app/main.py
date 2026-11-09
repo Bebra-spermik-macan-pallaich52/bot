@@ -1,17 +1,16 @@
-import logging
 from contextlib import asynccontextmanager
+import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import IntegrityError, SQLAlchemyError
-from app.db import init_db, close_db
-from app.api.v1.client_api_router import router as client_router
-from app.api.v1.tarif_api_router import router as tarif_router
+from sqlalchemy.exc import SQLAlchemyError
 
-logger = logging.getLogger(__name__)
+from app.database import init_db, close_db
+from app.routes import client_router, tarif_router
 
 
 @asynccontextmanager
-async def on_startup(app: FastAPI):
+async def lifespan(app):
     init_db()
     try:
         yield
@@ -19,24 +18,16 @@ async def on_startup(app: FastAPI):
         close_db()
 
 
-# Lifespan смонтированного приложения автоматически не запускается:
-# основной сервер управляет БД; app_v1 поддерживает и отдельный запуск.
-main_app = FastAPI(lifespan=on_startup, docs_url=None, redoc_url=None, openapi_url=None)
-app_v1 = FastAPI(title="Клиенты и тарифы — API v1", version="1.0.0", lifespan=on_startup)
-app_v1.include_router(client_router)
-app_v1.include_router(tarif_router)
-main_app.mount("/api/v1", app_v1)
+main_app = FastAPI(title="Клиенты и тарифы", version="1.0", lifespan=lifespan,
+                   docs_url="/api/v1/docs", redoc_url=None, openapi_url="/api/v1/openapi.json")
+main_app.include_router(tarif_router, prefix="/api/v1")
+main_app.include_router(client_router, prefix="/api/v1")
 
 
-@app_v1.exception_handler(IntegrityError)
-async def integrity_error(request: Request, exc: IntegrityError):
-    return JSONResponse(status_code=400, content={"detail": "Нарушение целостности данных"})
-
-
-@app_v1.exception_handler(SQLAlchemyError)
+@main_app.exception_handler(SQLAlchemyError)
 async def database_error(request: Request, exc: SQLAlchemyError):
-    logger.error("Ошибка базы данных: %s", type(exc).__name__)
-    return JSONResponse(status_code=500, content={"detail": "Внутренняя ошибка сервера"})
+    logging.error("Database error: %s", type(exc).__name__)
+    return JSONResponse(status_code=500, content={"detail": "Ошибка базы данных"})
 
 
 if __name__ == "__main__":
